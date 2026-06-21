@@ -5,11 +5,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 from flask import Response
 from functools import wraps
+import os
 
 
 def check_auth(username, password):
-    # Change these to your own secure credentials!
-    return username == 'admin' and password == 'password123'
+    return username == os.environ.get('ADMIN_USERNAME', 'admin') and \
+           password == os.environ.get('ADMIN_PASSWORD', 'password123')
 
 def authenticate():
     return Response(
@@ -28,16 +29,17 @@ def requires_auth(f):
 
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_routing_key_replace_in_production'
+app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_routing_key_replace_in_production')
 
-# Database configuration
-DB_HOST = 'localhost'
-DB_USER = 'root'
-DB_PASSWORD = ''
-DB_NAME = 'routing_system_db'
+# Database configuration — reads from environment variables (set these on Render)
+DB_HOST     = os.environ.get('DB_HOST', 'localhost')
+DB_USER     = os.environ.get('DB_USER', 'root')
+DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
+DB_NAME     = os.environ.get('DB_NAME', 'routing_system_db')
+DB_PORT     = int(os.environ.get('DB_PORT', 3306))
 
 
-# ── FIX: Custom JSON encoder so datetime/date objects don't crash jsonify ──
+# Custom JSON encoder so datetime/date objects don't crash jsonify
 class CustomJSONProvider(app.json_provider_class):
     def default(self, obj):
         if isinstance(obj, (datetime, date)):
@@ -54,6 +56,7 @@ def get_db_connection():
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,
+        port=DB_PORT,
         cursorclass=pymysql.cursors.DictCursor
     )
 
@@ -68,8 +71,8 @@ def home():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
+        name     = request.form['name']
+        email    = request.form['email']
         password = request.form['password']
 
         hashed_password = generate_password_hash(password)
@@ -82,8 +85,10 @@ def register():
                     flash('Email already registered. Please log in.', 'error')
                     return redirect(url_for('register'))
 
-                sql = "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)"
-                cursor.execute(sql, (name, email, hashed_password))
+                cursor.execute(
+                    "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)",
+                    (name, email, hashed_password)
+                )
             conn.commit()
             flash('Registration successful! Please log in.', 'success')
             return redirect(url_for('login'))
@@ -96,7 +101,7 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email']
+        email            = request.form['email']
         password_attempt = request.form['password']
 
         conn = get_db_connection()
@@ -106,7 +111,7 @@ def login():
                 user = cursor.fetchone()
 
                 if user and check_password_hash(user['password_hash'], password_attempt):
-                    session['user_id'] = user['id']
+                    session['user_id']   = user['id']
                     session['user_name'] = user['name']
                     return redirect(url_for('home'))
                 else:
@@ -191,12 +196,12 @@ def optimize_route():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    data = request.json
+    data     = request.json
     start_id = int(data['origin'])
     end_id   = int(data['destination'])
     mode     = data['mode']
 
-    all_legs = get_all_transit_legs()
+    all_legs        = get_all_transit_legs()
     possible_routes = []
 
     find_all_paths(all_legs, start_id, end_id, [], possible_routes, set())
@@ -213,8 +218,8 @@ def save_route():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    data    = request.json
-    user_id = session['user_id']
+    data      = request.json
+    user_id   = session['user_id']
     origin_id = data['origin']
     dest_id   = data['destination']
     mode      = data['mode']
@@ -237,12 +242,10 @@ def save_route():
             conn.commit()
             return jsonify({'message': 'Route saved successfully!'}), 201
     except Exception as e:
-        # ── FIX: log the real error so you can see it in your terminal ──
         print(f"ERROR in save_route: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
-
 
 
 @app.route('/api/saved_routes', methods=['GET'])
@@ -278,10 +281,6 @@ def get_saved_routes():
         conn.close()
 
 
-
-
-
-
 # ==========================================
 # ADMIN DASHBOARD ROUTES
 # ==========================================
@@ -289,29 +288,27 @@ def get_saved_routes():
 @app.route('/admin')
 @requires_auth
 def admin_dashboard():
-    # In a real app, you'd check if session['user_id'] is an admin here!
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Fetch landmarks so we can populate the dropdowns for adding routes
             cursor.execute("SELECT id, landmark_name FROM landmarks ORDER BY landmark_name ASC")
             landmarks = cursor.fetchall()
     finally:
         conn.close()
-    
+
     return render_template('admin.html', landmarks=landmarks)
+
 
 @app.route('/admin/add_landmark', methods=['POST'])
 @requires_auth
 def add_landmark():
     name = request.form.get('landmark_name')
-    lat = request.form.get('lat')
-    lng = request.form.get('lng')
+    lat  = request.form.get('lat')
+    lng  = request.form.get('lng')
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Add the new location with coordinates
             cursor.execute(
                 "INSERT INTO landmarks (landmark_name, lat, lng) VALUES (%s, %s, %s)",
                 (name, lat, lng)
@@ -319,24 +316,22 @@ def add_landmark():
         conn.commit()
     finally:
         conn.close()
-    
-    return redirect(url_for('admin_dashboard'))
 
+    return redirect(url_for('admin_dashboard'))
 
 
 @app.route('/admin/add_leg', methods=['POST'])
 @requires_auth
 def add_leg():
     start_node = request.form.get('start_node')
-    end_node = request.form.get('end_node')
-    mode = request.form.get('mode')
-    cost = request.form.get('cost')
-    time = request.form.get('time')
+    end_node   = request.form.get('end_node')
+    mode       = request.form.get('mode')
+    cost       = request.form.get('cost')
+    time       = request.form.get('time')
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Add the new connection between two existing nodes
             cursor.execute(
                 "INSERT INTO transit_legs (start_node_id, end_node_id, transport_mode, cost, travel_time) VALUES (%s, %s, %s, %s, %s)",
                 (start_node, end_node, mode, cost, time)
@@ -344,16 +339,9 @@ def add_leg():
         conn.commit()
     finally:
         conn.close()
-    
+
     return redirect(url_for('admin_dashboard'))
 
 
-
-
-
-
-
-
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
