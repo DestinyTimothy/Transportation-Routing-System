@@ -1,13 +1,14 @@
 from pso_engine import run_pso
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import pymysql
+import pymysql.cursors
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 from flask import Response
 from functools import wraps
 import os
 
-
+# --- AUTHENTICATION HELPERS ---
 def check_auth(username, password):
     return username == os.environ.get('ADMIN_USERNAME', 'admin') and \
            password == os.environ.get('ADMIN_PASSWORD', 'password123')
@@ -27,19 +28,18 @@ def requires_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-
+# --- APP SETUP ---
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_routing_key_replace_in_production')
 
-# Database configuration — reads from environment variables (set these on Render)
+# Database configuration
 DB_HOST     = os.environ.get('DB_HOST', 'localhost')
 DB_USER     = os.environ.get('DB_USER', 'root')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
 DB_NAME     = os.environ.get('DB_NAME', 'routing_system_db')
 DB_PORT     = int(os.environ.get('DB_PORT', 3306))
 
-
-# Custom JSON encoder so datetime/date objects don't crash jsonify
+# Custom JSON encoder
 class CustomJSONProvider(app.json_provider_class):
     def default(self, obj):
         if isinstance(obj, (datetime, date)):
@@ -49,17 +49,24 @@ class CustomJSONProvider(app.json_provider_class):
 app.json_provider_class = CustomJSONProvider
 app.json = CustomJSONProvider(app)
 
-
+# Database Connection Helper with SSL Support
 def get_db_connection():
+    # If ca.pem exists in the root folder, use it for SSL
+    ssl_config = None
+    if os.path.exists('ca.pem'):
+        ssl_config = {'ca': 'ca.pem'}
+        
     return pymysql.connect(
         host=DB_HOST,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,
         port=DB_PORT,
+        ssl=ssl_config, 
         cursorclass=pymysql.cursors.DictCursor
     )
 
+# --- ROUTES ---
 
 @app.route('/')
 def home():
@@ -67,14 +74,12 @@ def home():
         return redirect(url_for('login'))
     return render_template('index.html', user_name=session.get('user_name'))
 
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         name     = request.form['name']
         email    = request.form['email']
         password = request.form['password']
-
         hashed_password = generate_password_hash(password)
 
         conn = get_db_connection()
@@ -94,9 +99,7 @@ def register():
             return redirect(url_for('login'))
         finally:
             conn.close()
-
     return render_template('register.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -118,15 +121,12 @@ def login():
                     flash('Invalid email or password.', 'error')
         finally:
             conn.close()
-
     return render_template('login.html')
-
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
-
 
 @app.route('/api/landmarks', methods=['GET'])
 def get_landmarks():
@@ -138,7 +138,6 @@ def get_landmarks():
             return jsonify(landmarks)
     finally:
         conn.close()
-
 
 def get_all_transit_legs():
     conn = get_db_connection()
@@ -158,7 +157,6 @@ def get_all_transit_legs():
             bidirectional_legs = []
             for leg in original_legs:
                 bidirectional_legs.append(leg)
-
                 reverse_leg = leg.copy()
                 reverse_leg['start_node_id'] = leg['end_node_id']
                 reverse_leg['end_node_id']   = leg['start_node_id']
@@ -174,97 +172,69 @@ def get_all_transit_legs():
     finally:
         conn.close()
 
-
 def find_all_paths(legs, current_node, target_node, current_path, all_paths, visited):
     if current_node == target_node:
         all_paths.append(list(current_path))
         return
-
     visited.add(current_node)
-
     for leg in legs:
         if leg['start_node_id'] == current_node and leg['end_node_id'] not in visited:
             current_path.append(leg)
             find_all_paths(legs, leg['end_node_id'], target_node, current_path, all_paths, visited)
             current_path.pop()
-
     visited.remove(current_node)
-
 
 @app.route('/api/optimize', methods=['POST'])
 def optimize_route():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-
     data     = request.json
     start_id = int(data['origin'])
     end_id   = int(data['destination'])
     mode     = data['mode']
-
-    all_legs        = get_all_transit_legs()
+    all_legs = get_all_transit_legs()
     possible_routes = []
-
     find_all_paths(all_legs, start_id, end_id, [], possible_routes, set())
-
     if not possible_routes:
-        return jsonify({'error': 'No valid routes found between these landmarks.'}), 404
-
+        return jsonify({'error': 'No valid routes found.'}), 404
     optimal_solution = run_pso(possible_routes, mode)
     return jsonify(optimal_solution)
-
 
 @app.route('/api/save_route', methods=['POST'])
 def save_route():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    data      = request.json
-    user_id   = session['user_id']
-    origin_id = data['origin']
-    dest_id   = data['destination']
-    mode      = data['mode']
-
+    data        = request.json
+    user_id     = session['user_id']
+    origin_id   = data['origin']
+    dest_id     = data['destination']
+    mode        = data['mode']
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT id FROM saved_routes
-                WHERE user_id = %s AND origin_id = %s AND destination_id = %s AND optimization_mode = %s
-            """, (user_id, origin_id, dest_id, mode))
-
+            cursor.execute("SELECT id FROM saved_routes WHERE user_id = %s AND origin_id = %s AND destination_id = %s AND optimization_mode = %s", (user_id, origin_id, dest_id, mode))
             if cursor.fetchone():
                 return jsonify({'message': 'Route already saved!'}), 200
-
-            cursor.execute("""
-                INSERT INTO saved_routes (user_id, origin_id, destination_id, optimization_mode)
-                VALUES (%s, %s, %s, %s)
-            """, (user_id, origin_id, dest_id, mode))
+            cursor.execute("INSERT INTO saved_routes (user_id, origin_id, destination_id, optimization_mode) VALUES (%s, %s, %s, %s)", (user_id, origin_id, dest_id, mode))
             conn.commit()
             return jsonify({'message': 'Route saved successfully!'}), 201
     except Exception as e:
-        print(f"ERROR in save_route: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
-
 
 @app.route('/api/saved_routes', methods=['GET'])
 def get_saved_routes():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-
     user_id = session['user_id']
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             sql = """
-                SELECT sr.id,
-                       sr.origin_id,
-                       sr.destination_id,
-                       sr.optimization_mode,
+                SELECT sr.id, sr.origin_id, sr.destination_id, sr.optimization_mode,
                        CAST(sr.saved_at AS CHAR) as saved_at,
-                       o.landmark_name as origin_name,
-                       d.landmark_name as destination_name
+                       o.landmark_name as origin_name, d.landmark_name as destination_name
                 FROM saved_routes sr
                 JOIN landmarks o ON sr.origin_id = o.id
                 JOIN landmarks d ON sr.destination_id = d.id
@@ -275,15 +245,9 @@ def get_saved_routes():
             rows = cursor.fetchall()
             return jsonify(rows)
     except Exception as e:
-        print(f"ERROR in get_saved_routes: {e}")
-        return jsonify({'error': str(e), 'type': type(e).__name__}), 500
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
-
-
-# ==========================================
-# ADMIN DASHBOARD ROUTES
-# ==========================================
 
 @app.route('/admin')
 @requires_auth
@@ -295,53 +259,33 @@ def admin_dashboard():
             landmarks = cursor.fetchall()
     finally:
         conn.close()
-
     return render_template('admin.html', landmarks=landmarks)
-
 
 @app.route('/admin/add_landmark', methods=['POST'])
 @requires_auth
 def add_landmark():
-    name = request.form.get('landmark_name')
-    lat  = request.form.get('lat')
-    lng  = request.form.get('lng')
-
+    name, lat, lng = request.form.get('landmark_name'), request.form.get('lat'), request.form.get('lng')
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO landmarks (landmark_name, lat, lng) VALUES (%s, %s, %s)",
-                (name, lat, lng)
-            )
+            cursor.execute("INSERT INTO landmarks (landmark_name, lat, lng) VALUES (%s, %s, %s)", (name, lat, lng))
         conn.commit()
     finally:
         conn.close()
-
     return redirect(url_for('admin_dashboard'))
-
 
 @app.route('/admin/add_leg', methods=['POST'])
 @requires_auth
 def add_leg():
-    start_node = request.form.get('start_node')
-    end_node   = request.form.get('end_node')
-    mode       = request.form.get('mode')
-    cost       = request.form.get('cost')
-    time       = request.form.get('time')
-
+    start_node, end_node, mode, cost, time = request.form.get('start_node'), request.form.get('end_node'), request.form.get('mode'), request.form.get('cost'), request.form.get('time')
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO transit_legs (start_node_id, end_node_id, transport_mode, cost, travel_time) VALUES (%s, %s, %s, %s, %s)",
-                (start_node, end_node, mode, cost, time)
-            )
+            cursor.execute("INSERT INTO transit_legs (start_node_id, end_node_id, transport_mode, cost, travel_time) VALUES (%s, %s, %s, %s, %s)", (start_node, end_node, mode, cost, time))
         conn.commit()
     finally:
         conn.close()
-
     return redirect(url_for('admin_dashboard'))
-
 
 if __name__ == '__main__':
     app.run(debug=False)
