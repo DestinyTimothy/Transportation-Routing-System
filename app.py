@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from pso_engine import run_pso
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import pymysql
@@ -11,7 +13,7 @@ import os
 # --- AUTHENTICATION HELPERS ---
 def check_auth(username, password):
     return username == os.environ.get('ADMIN_USERNAME', 'admin') and \
-           password == os.environ.get('ADMIN_PASSWORD', 'password123')
+            password == os.environ.get('ADMIN_PASSWORD', 'password123')
 
 def authenticate():
     return Response(
@@ -49,20 +51,15 @@ class CustomJSONProvider(app.json_provider_class):
 app.json_provider_class = CustomJSONProvider
 app.json = CustomJSONProvider(app)
 
-# Database Connection Helper with SSL Support
+# Database Connection Helper
 def get_db_connection():
-    # If ca.pem exists in the root folder, use it for SSL
-    ssl_config = None
-    if os.path.exists('ca.pem'):
-        ssl_config = {'ca': 'ca.pem'}
-        
+    # SSL disabled to prevent 'SSL required' errors on free-tier servers
     return pymysql.connect(
         host=DB_HOST,
         user=DB_USER,
         password=DB_PASSWORD,
         database=DB_NAME,
         port=DB_PORT,
-        ssl=ssl_config, 
         cursorclass=pymysql.cursors.DictCursor
     )
 
@@ -204,7 +201,7 @@ def optimize_route():
 def save_route():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-    data        = request.json
+    data          = request.json
     user_id     = session['user_id']
     origin_id   = data['origin']
     dest_id     = data['destination']
