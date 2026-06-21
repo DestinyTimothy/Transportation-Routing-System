@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Multi-Modal Routing System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+
+        :root {
+            --bg: #F8F9FA;
+            --card: #FFFFFF;
+            --border: #E8EAED;
+            --text-primary: #202124;
+            --text-secondary: #5F6368;
+            --text-muted: #9AA0A6;
+            --input-bg: #F1F3F4;
+            --input-border: #DADCE0;
+        }
+        html.dark {
+            --bg: #0F1823;
+            --card: #1A2333;
+            --border: #2C3E55;
+            --text-primary: #E8EAED;
+            --text-secondary: #9AA0A6;
+            --text-muted: #5F6368;
+            --input-bg: #1E2D42;
+            --input-border: #2C3E55;
+        }
+
+        body { background: var(--bg); color: var(--text-primary); transition: background 0.25s, color 0.25s; }
+        .card { background: var(--card); border: 1px solid var(--border); transition: background 0.25s, border-color 0.25s; }
+        .txt-primary  { color: var(--text-primary); }
+        .txt-secondary { color: var(--text-secondary); }
+        .txt-muted    { color: var(--text-muted); }
+
+        .input-field {
+            background: var(--input-bg);
+            border: 1.5px solid var(--input-border);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        .input-field:focus {
+            border-color: #1A73E8;
+            box-shadow: 0 0 0 3px rgba(26,115,232,0.12);
+            outline: none;
+            background: var(--card);
+        }
+
+        /* ── Mode pills ── */
+        .mode-pill {
+            border: 1.5px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .mode-pill:hover { border-color: #1A73E8; color: #1A73E8; }
+        .mode-pill.sel-economic { border-color: #0D9B6C; background: #E6F4F0; color: #0D9B6C; }
+        .mode-pill.sel-express  { border-color: #E37400; background: #FEF3E2; color: #E37400; }
+        html.dark .mode-pill.sel-economic { background: rgba(13,155,108,0.12); }
+        html.dark .mode-pill.sel-express  { background: rgba(249,171,0,0.10); }
+
+        /* ── Saved route chip ── */
+        .saved-chip {
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            transition: all 0.18s;
+            text-align: left;
+        }
+        .saved-chip:hover  { border-color: #1A73E8; background: var(--card); }
+        .saved-chip:focus  { outline: none; box-shadow: 0 0 0 3px rgba(26,115,232,0.18); border-color: #1A73E8; }
+
+        #map { border-radius: 12px; }
+
+        @keyframes fadeSlide { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        .anim-in { animation: fadeSlide 0.3s ease forwards; }
+
+        /* ── Dropdown menu ── */
+        #navMenu {
+            background: var(--card);
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+            min-width: 220px;
+            border-radius: 14px;
+            overflow: hidden;
+            transition: background 0.25s, border-color 0.25s;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 18px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            text-decoration: none;
+        }
+        .menu-item:hover { background: var(--input-bg); }
+        .menu-item .menu-icon { color: var(--text-muted); flex-shrink: 0; }
+        .menu-item:hover .menu-icon { color: #1A73E8; }
+
+        .menu-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
+
+        /* theme toggle inside menu */
+        .menu-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 18px;
+            cursor: pointer;
+        }
+        .menu-toggle-row:hover { background: var(--input-bg); }
+        .menu-toggle-row .left  { display: flex; align-items: center; gap: 12px; font-size: 0.875rem; font-weight: 500; color: var(--text-primary); }
+        .menu-toggle-row .left .menu-icon { color: var(--text-muted); }
+
+        .toggle-track {
+            width: 36px; height: 20px;
+            background: #BDC1C6;
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .toggle-track.on { background: #1A73E8; }
+        .toggle-thumb {
+            width: 14px; height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px; left: 3px;
+            transition: transform 0.25s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        }
+        .toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+        /* hamburger button */
+        #menuBtn {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            color: var(--text-primary);
+        }
+        #menuBtn:hover { background: var(--card); border-color: #1A73E8; }
+        #menuBtn.active { background: var(--card); border-color: #1A73E8; }
+
+        /* logout red tint */
+        .menu-item.danger       { color: #D93025; }
+        .menu-item.danger .menu-icon { color: #D93025; }
+        .menu-item.danger:hover { background: rgba(217,48,37,0.07); }
+    </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="card sticky top-0 z-40 shadow-sm">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+
+        <!-- Brand -->
+        <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                <i data-lucide="map-pin" class="text-white" style="width:16px;height:16px;stroke-width:2.5;"></i>
+            </div>
+            <span class="font-semibold text-sm sm:text-base txt-primary tracking-tight">Transportation Routing</span>
+        </div>
+
+        <!-- Right: welcome + menu -->
+        <div class="flex items-center gap-3">
+            <span class="hidden sm:block text-sm txt-secondary">
+                Welcome, <span class="font-semibold text-blue-600">{{ user_name }}</span>
+            </span>
+
+            <!-- Menu button -->
+            <div class="relative">
+                <button id="menuBtn" aria-label="Open menu" onclick="toggleMenu()">
+                    <i data-lucide="menu" style="width:18px;height:18px;stroke-width:2;"></i>
+                </button>
+
+                <!-- Dropdown -->
+                <div id="navMenu" class="absolute right-0 top-12 z-50 hidden">
+
+                    <!-- Saved Routes -->
+                    <button class="menu-item" onclick="openSavedRoutes()">
+                        <i data-lucide="bookmark" class="menu-icon" style="width:16px;height:16px;stroke-width:2;"></i>
+                        Saved Routes
+                    </button>
+
+                    <!-- Add a Route (placeholder) -->
+                    <button class="menu-item" onclick="closeMenu()">
+                        <i data-lucide="plus-circle" class="menu-icon" style="width:16px;height:16px;stroke-width:2;"></i>
+                        <a href="https://docs.google.com/forms/d/e/1FAIpQLScczIUjUgaML6MUqT3-j4eJ8E6VfR6PIPzri-zhi2S1tl0gAA/viewform?usp=dialog">Add a Route</a>
+                    </button>
+
+                    <div class="menu-divider"></div>
+
+                    <!-- Dark mode toggle -->
+                    <div class="menu-toggle-row" onclick="toggleTheme()">
+                        <div class="left">
+                            <i data-lucide="moon" class="menu-icon" style="width:16px;height:16px;stroke-width:2;"></i>
+                            Dark Mode
+                        </div>
+                        <div class="toggle-track" id="themeToggle">
+                            <div class="toggle-thumb"></div>
+                        </div>
+                    </div>
+
+                    <div class="menu-divider"></div>
+
+                    <!-- Log out -->
+                    <a href="{{ url_for('logout') }}" class="menu-item danger">
+                        <i data-lucide="log-out" class="menu-icon" style="width:16px;height:16px;stroke-width:2;"></i>
+                        Log Out
+                    </a>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- MAIN -->
+<main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+
+    <!-- Mobile welcome -->
+    <div class="sm:hidden">
+        <p class="text-sm txt-secondary">Welcome, <span class="font-semibold text-blue-600">{{ user_name }}</span></p>
+    </div>
+
+    <h1 class="text-2xl font-bold txt-primary">Plan Your Journey</h1>
+
+    <!-- ── ROUTE PLANNER ── -->
+    <div class="card rounded-2xl shadow-sm p-5 sm:p-6">
+        <form id="routingForm">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                <div>
+                    <label class="block text-xs font-semibold txt-secondary uppercase tracking-wider mb-1.5">
+                        Starting point
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-green-500">
+                            <i data-lucide="circle-dot" style="width:16px;height:16px;stroke-width:2;"></i>
+                        </span>
+                        <select id="origin" name="origin"
+                            class="input-field w-full pl-9 pr-8 py-2.5 rounded-xl text-sm appearance-none">
+                            <option value="">Select starting point…</option>
+                        </select>
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 txt-muted pointer-events-none">
+                            <i data-lucide="chevron-down" style="width:14px;height:14px;"></i>
+                        </span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold txt-secondary uppercase tracking-wider mb-1.5">
+                        Destination
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-red-500">
+                            <i data-lucide="map-pin" style="width:16px;height:16px;stroke-width:2;"></i>
+                        </span>
+                        <select id="destination" name="destination"
+                            class="input-field w-full pl-9 pr-8 py-2.5 rounded-xl text-sm appearance-none">
+                            <option value="">Select destination…</option>
+                        </select>
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 txt-muted pointer-events-none">
+                            <i data-lucide="chevron-down" style="width:14px;height:14px;"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optimization Mode -->
+            <div class="mb-5">
+                <label class="block text-xs font-semibold txt-secondary uppercase tracking-wider mb-2.5">
+                    Optimization Preference
+                </label>
+                <div class="flex flex-wrap gap-3">
+                    <label class="mode-pill sel-economic flex items-center gap-2.5 px-4 py-2.5 rounded-xl" id="pill-economic">
+                        <input type="radio" name="mode" value="economic" checked class="hidden">
+                        <i data-lucide="coins" style="width:16px;height:16px;stroke-width:2;"></i>
+                        <div>
+                            <p class="text-sm font-semibold leading-none">Economic</p>
+                            <p class="text-xs opacity-70 mt-0.5">Lowest Cost</p>
+                        </div>
+                    </label>
+
+                    <label class="mode-pill flex items-center gap-2.5 px-4 py-2.5 rounded-xl" id="pill-express">
+                        <input type="radio" name="mode" value="express" class="hidden">
+                        <i data-lucide="zap" style="width:16px;height:16px;stroke-width:2;"></i>
+                        <div>
+                            <p class="text-sm font-semibold leading-none">Express</p>
+                            <p class="text-xs opacity-70 mt-0.5">Fastest Time</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
+                <i data-lucide="search" style="width:16px;height:16px;stroke-width:2.5;"></i>
+                Find Optimal Route
+            </button>
+        </form>
+    </div>
+
+    <!-- ── SAVED ROUTES PANEL (hidden by default, toggled from menu) ── -->
+    <div id="savedRoutesPanel" class="hidden card rounded-2xl shadow-sm p-5 anim-in">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+                <i data-lucide="bookmark" class="text-blue-600" style="width:16px;height:16px;stroke-width:2;"></i>
+                <h3 class="text-sm font-semibold txt-primary">Your Saved Routes</h3>
+            </div>
+            <!-- X close button -->
+            <button onclick="closeSavedRoutes()"
+                class="flex items-center justify-center w-7 h-7 rounded-lg txt-muted hover:txt-primary transition"
+                style="background:var(--input-bg); border:1px solid var(--border);"
+                aria-label="Close saved routes">
+                <i data-lucide="x" style="width:14px;height:14px;stroke-width:2.5;"></i>
+            </button>
+        </div>
+        <p class="text-sm txt-muted italic" id="noSavedRoutesMsg">You haven't saved any routes yet.</p>
+        <div id="savedRoutesContainer" class="flex flex-wrap gap-2 mt-1"></div>
+    </div>
+
+    <!-- ── RESULTS ── -->
+    <div id="resultsContainer" class="hidden card rounded-2xl shadow-sm p-5 sm:p-6" style="border-left: 3px solid #0D9B6C;">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="text-base font-bold txt-primary flex items-center gap-2">
+                <i data-lucide="route" class="text-green-600" style="width:16px;height:16px;"></i>
+                Optimized Route Itinerary
+            </h3>
+            <button id="saveRouteBtn"
+                class="flex items-center gap-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-1.5 px-3 rounded-lg transition border border-blue-200">
+                <i data-lucide="bookmark-plus" style="width:13px;height:13px;stroke-width:2.5;"></i>
+                Bookmark Route
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-5">
+            <div class="rounded-xl p-4 bg-green-50 border border-green-100">
+                <p class="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1 flex items-center gap-1">
+                    <i data-lucide="banknote" style="width:12px;height:12px;"></i>
+                    Total Estimated Cost
+                </p>
+                <p class="text-2xl font-bold text-green-700">₦<span id="displayCost">0</span></p>
+            </div>
+            <div class="rounded-xl p-4 bg-blue-50 border border-blue-100">
+                <p class="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1 flex items-center gap-1">
+                    <i data-lucide="clock" style="width:12px;height:12px;"></i>
+                    Total Estimated Duration
+                </p>
+                <p class="text-2xl font-bold text-blue-700"><span id="displayTime">0</span> <span class="text-base font-medium">mins</span></p>
+            </div>
+        </div>
+
+        <div class="rounded-xl p-4" style="background:var(--input-bg);border:1px solid var(--border);">
+            <h4 class="text-xs font-semibold txt-secondary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <i data-lucide="list-ordered" style="width:13px;height:13px;"></i>
+                Step-by-Step Instructions
+            </h4>
+            <ul id="instructionsList" class="space-y-3 text-sm txt-secondary"></ul>
+        </div>
+    </div>
+
+    <!-- ── MAP ── -->
+    <div class="card rounded-2xl shadow-sm p-4">
+        <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="map" class="txt-secondary" style="width:15px;height:15px;stroke-width:2;"></i>
+            <h3 class="text-sm font-semibold txt-primary">Map View</h3>
+        </div>
+        <div id="map" class="h-72 sm:h-96 w-full"></div>
+    </div>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/main.js"></script>
+
+<script>
+    lucide.createIcons();
+
+    /* ── Theme ── */
+    const root  = document.documentElement;
+    const track = document.getElementById('themeToggle');
+
+    function applyTheme(dark) {
+        root.classList.toggle('dark', dark);
+        track.classList.toggle('on', dark);
+    }
+
+    function toggleTheme() {
+        const isDark = !root.classList.contains('dark');
+        applyTheme(isDark);
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+
+    // On load
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && prefersDark));
+
+    /* ── Hamburger menu ── */
+    const menuBtn  = document.getElementById('menuBtn');
+    const navMenu  = document.getElementById('navMenu');
+    let menuOpen   = false;
+
+    function toggleMenu() {
+        menuOpen = !menuOpen;
+        navMenu.classList.toggle('hidden', !menuOpen);
+        menuBtn.classList.toggle('active', menuOpen);
+    }
+
+    function closeMenu() {
+        menuOpen = false;
+        navMenu.classList.add('hidden');
+        menuBtn.classList.remove('active');
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+        if (menuOpen && !menuBtn.contains(e.target) && !navMenu.contains(e.target)) {
+            closeMenu();
+        }
+    });
+
+    /* ── Saved routes panel ── */
+    function openSavedRoutes() {
+        const panel = document.getElementById('savedRoutesPanel');
+        panel.classList.remove('hidden');
+        panel.classList.add('anim-in');
+        fetchSavedRoutes();
+        closeMenu();
+        // Scroll to the panel smoothly
+        setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+
+    function closeSavedRoutes() {
+        document.getElementById('savedRoutesPanel').classList.add('hidden');
+    }
+
+    /* ── Mode pill selection ── */
+    document.querySelectorAll('input[name="mode"]').forEach(radio => {
+        radio.closest('label').addEventListener('click', () => {
+            document.getElementById('pill-economic').classList.remove('sel-economic');
+            document.getElementById('pill-express').classList.remove('sel-express');
+            document.getElementById('pill-' + radio.value)
+                    .classList.add(radio.value === 'economic' ? 'sel-economic' : 'sel-express');
+        });
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Routing System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <script>tailwind.config = { darkMode: 'class' }</script>
+
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        :root {
+            --bg: #F8F9FA;
+            --card: #FFFFFF;
+            --border: #E8EAED;
+            --text-primary: #202124;
+            --text-secondary: #5F6368;
+            --input-bg: #FFFFFF;
+            --input-border: #DADCE0;
+        }
+        html.dark {
+            --bg: #0F1823;
+            --card: #1A2333;
+            --border: #2C3E55;
+            --text-primary: #E8EAED;
+            --text-secondary: #9AA0A6;
+            --input-bg: #1E2D42;
+            --input-border: #2C3E55;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.25s;
+            padding: 1.25rem;
+        }
+        .card { background: var(--card); border: 1px solid var(--border); transition: background 0.25s, border-color 0.25s; }
+        .txt-primary { color: var(--text-primary); }
+        .txt-secondary { color: var(--text-secondary); }
+
+        .input-field {
+            background: var(--input-bg);
+            border: 1.5px solid var(--input-border);
+            color: var(--text-primary);
+            width: 100%;
+            padding: 0.65rem 1rem 0.65rem 2.5rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .input-field:focus { border-color: #1A73E8; box-shadow: 0 0 0 3px rgba(26,115,232,0.12); background: var(--card); }
+        .input-field::placeholder { color: #9AA0A6; }
+
+        .toggle-track {
+            width: 40px; height: 22px; background: #BDC1C6; border-radius: 11px;
+            position: relative; cursor: pointer; transition: background 0.25s;
+        }
+        .toggle-track.on { background: #1A73E8; }
+        .toggle-thumb {
+            width: 16px; height: 16px; background: #fff; border-radius: 50%;
+            position: absolute; top: 3px; left: 3px;
+            transition: transform 0.25s; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        .toggle-track.on .toggle-thumb { transform: translateX(18px); }
+    </style>
+</head>
+<body>
+
+    <!-- Theme toggle -->
+    <div class="fixed top-4 right-4 flex items-center gap-1.5 z-10">
+        <i data-lucide="sun" style="width:13px;height:13px;color:var(--text-secondary);"></i>
+        <div class="toggle-track" id="themeToggle" onclick="toggleTheme()"><div class="toggle-thumb"></div></div>
+        <i data-lucide="moon" style="width:13px;height:13px;color:var(--text-secondary);"></i>
+    </div>
+
+    <div class="w-full max-w-sm">
+
+        <!-- Logo -->
+        <div class="text-center mb-7">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600 shadow-lg mb-3">
+                <i data-lucide="map-pin" style="width:22px;height:22px;color:white;stroke-width:2.5;"></i>
+            </div>
+            <h1 class="text-xl font-bold txt-primary">Transportation Routing System</h1>
+            <p class="text-sm txt-secondary mt-1">Sign in to your account</p>
+        </div>
+
+        <!-- Card -->
+        <div class="card rounded-2xl shadow-xl p-6 sm:p-7">
+
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flex items-start gap-2 rounded-xl px-4 py-3 mb-5 text-sm font-medium bg-blue-50 border border-blue-200 text-blue-800">
+                        <i data-lucide="info" style="width:15px;height:15px;flex-shrink:0;margin-top:1px;"></i>
+                        {{ messages[0] }}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('login') }}" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold txt-secondary uppercase tracking-wider mb-1.5">Email Address</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 txt-secondary">
+                            <i data-lucide="mail" style="width:15px;height:15px;stroke-width:2;"></i>
+                        </span>
+                        <input type="email" name="email" required placeholder="you@example.com" class="input-field">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold txt-secondary uppercase tracking-wider mb-1.5">Password</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 txt-secondary">
+                            <i data-lucide="lock" style="width:15px;height:15px;stroke-width:2;"></i>
+                        </span>
+                        <input type="password" name="password" required placeholder="Enter your password" class="input-field">
+                    </div>
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
+                    <i data-lucide="log-in" style="width:15px;height:15px;stroke-width:2.5;"></i>
+                    Log In
+                </button>
+            </form>
+
+            <div class="mt-5 pt-5 text-center" style="border-top:1px solid var(--border);">
+                <p class="text-sm txt-secondary">
+                    Need an account?
+                    <a href="{{ url_for('register') }}" class="text-blue-600 font-semibold hover:underline ml-1">Register here →</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const root = document.documentElement;
+        const track = document.getElementById('themeToggle');
+        function toggleTheme() {
+            const isDark = root.classList.toggle('dark');
+            track.classList.toggle('on', isDark);
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+        if (localStorage.getItem('theme') === 'dark' ||
+            (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            root.classList.add('dark'); track.classList.add('on');
+        }
+    </script>
+</body>
+</html>

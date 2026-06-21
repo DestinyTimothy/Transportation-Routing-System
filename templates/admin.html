@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Routing Engine - Admin Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid #334155; }
+        .input-dark { background-color: #1e293b; border: 1px solid #475569; color: white; }
+        .input-dark:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-3xl font-bold mb-2 text-white">Data Control Center</h1>
+        <p class="text-slate-400 mb-8">Manage landmarks and transit mesh network.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <div class="flex items-center mb-6">
+                    <div class="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center mr-3">
+                        <span class="text-white font-bold">1</span>
+                    </div>
+                    <h2 class="text-xl font-semibold">Plot New Location</h2>
+                </div>
+                
+                <form action="/admin/add_landmark" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Landmark Name</label>
+                        <input type="text" name="landmark_name" required placeholder="e.g., Agip Junction" class="w-full input-dark rounded-lg p-3">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Latitude (Decimal)</label>
+                            <input type="number" step="any" name="lat" required placeholder="4.815600" class="w-full input-dark rounded-lg p-3">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Longitude (Decimal)</label>
+                            <input type="number" step="any" name="lng" required placeholder="7.049800" class="w-full input-dark rounded-lg p-3">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition duration-200 mt-4">
+                        Save Location to Database
+                    </button>
+                </form>
+            </div>
+
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <div class="flex items-center mb-6">
+                    <div class="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center mr-3">
+                        <span class="text-white font-bold">2</span>
+                    </div>
+                    <h2 class="text-xl font-semibold">Connect a Route</h2>
+                </div>
+
+                <form action="/admin/add_leg" method="POST" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Start Node</label>
+                            <select name="start_node" required class="w-full input-dark rounded-lg p-3">
+                                <option value="">Select Origin...</option>
+                                {% for lm in landmarks %}
+                                    <option value="{{ lm.id }}">{{ lm.landmark_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">End Node</label>
+                            <select name="end_node" required class="w-full input-dark rounded-lg p-3">
+                                <option value="">Select Destination...</option>
+                                {% for lm in landmarks %}
+                                    <option value="{{ lm.id }}">{{ lm.landmark_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Transport Mode</label>
+                        <select name="mode" required class="w-full input-dark rounded-lg p-3">
+                            <option value="Bus">Bus</option>
+                            <option value="Taxi">Taxi</option>
+                            <option value="Keke">Keke</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Cost (₦)</label>
+                            <input type="number" name="cost" required placeholder="150" class="w-full input-dark rounded-lg p-3">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Travel Time (Mins)</label>
+                            <input type="number" name="time" required placeholder="15" class="w-full input-dark rounded-lg p-3">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition duration-200 mt-4">
+                        Create Route Leg
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
