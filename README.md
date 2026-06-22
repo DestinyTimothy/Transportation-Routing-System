@@ -10,8 +10,6 @@
 
 **An intelligent, multi-objective public transit routing application optimized via discrete Particle Swarm Optimization (PSO). Tailored for complex, informal urban transport networks.**
 
-[Explore Features](#-key-features) • [How It Works](#-how-the-optimization-engine-works) • [Installation](#%EF%B8%8F-installation--workspace-setup) • [API Reference](#-api-endpoints)
-
 </div>
 
 ---
